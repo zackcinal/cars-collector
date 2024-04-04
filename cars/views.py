@@ -1,10 +1,58 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import generics
+from rest_framework import generics, status, permissions
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.exceptions import PermissionDenied
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
 from .models import Car, Fueling, Accessory
-from .serializers import CarSerializer, FuelingSerializer, AccessorySerializer
+from .serializers import CarSerializer, FuelingSerializer, AccessorySerializer, UserSerializer
 
 # Define the home view
+class CreateUserView(generics.CreateAPIView):
+  queryset = User.objects.all()
+  serializer_class = UserSerializer
+
+  def create(self, request, *args, **kwargs):
+    response = super().create(request, *args, **kwargs)
+    user = User.objects.get(username=response.data['username'])
+    refresh = RefreshToken.for_user(user)
+    return Response({
+      'refresh': str(refresh),
+      'access': str(refresh.access_token),
+      'user': response.data
+    })
+
+# User Login
+class LoginView(APIView):
+  permission_classes = [permissions.AllowAny]
+
+  def post(self, request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    user = authenticate(username=username, password=password)
+    if user:
+      refresh = RefreshToken.for_user(user)
+      return Response({
+        'refresh': str(refresh),
+        'access': str(refresh.access_token),
+        'user': UserSerializer(user).data
+      })
+    return Response({'error': 'Invalid Credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
+# User Verification
+class VerifyUserView(APIView):
+  permission_classes = [permissions.IsAuthenticated]
+
+  def get(self, request):
+    user = User.objects.get(username=request.user)  # Fetch user profile
+    refresh = RefreshToken.for_user(request.user)  # Generate new refresh token
+    return Response({
+      'refresh': str(refresh),
+      'access': str(refresh.access_token),
+      'user': UserSerializer(user).data
+    })
+
 class Home(APIView):
   def get(self, request):
     content = {'message': 'Welcome to the car-collector api home route!'}
@@ -20,13 +68,23 @@ class AccessoryDetail(generics.RetrieveUpdateDestroyAPIView):
   lookup_field = 'id'
 
 class CarList(generics.ListCreateAPIView):
-  queryset = Car.objects.all()
   serializer_class = CarSerializer
+  permission_classes = [permissions.IsAuthenticated]
+
+  def get_queryset(self):
+    user = self.request.user
+    return Car.objects.filter(user=user)
+  
+  def perform_create(self, serializer):
+    serializer.save(user=self.request.user)
 
 class CarDetail(generics.RetrieveUpdateDestroyAPIView):
-  queryset = Car.objects.all()
   serializer_class = CarSerializer
   lookup_field = 'id'
+
+  def get_queryset(self):
+    user = self.request.user
+    return Car.objects.filter(user=user)
 
   def retrieve(self, request, *args, **kwargs):
     instance = self.get_object()
@@ -39,6 +97,17 @@ class CarDetail(generics.RetrieveUpdateDestroyAPIView):
       'car': serializers.data,
       'accessories_not_assiciated': accessories_serializer.data
     })
+  
+  def perform_update(self, serializer):
+    car = self.get_object()
+    if car.user != self.request.user:
+      raise PermissionDenied({"message": "You do not have permission to edit this car"})
+    serializer.save()
+
+    def perform_destroy(self, instance):
+      if instance.user != self.request.user:
+          raise PermissionDenied({"message": "You do not have permission to delete this car."})
+      instance.delete()
 
 class FuelingListCreate(generics.ListCreateAPIView):
   serializer_class = FuelingSerializer

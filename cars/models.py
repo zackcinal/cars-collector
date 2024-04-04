@@ -1,5 +1,6 @@
 from django.db import models
 from datetime import date
+from django.contrib.auth.models import User
 
 # Create your models here.
 FUELS = (
@@ -22,6 +23,7 @@ class Car(models.Model):
     year = models.IntegerField()
     isElectric = models.BooleanField()
     accessories = models.ManyToManyField(Accessory)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
 
     def __str__(self):
         return self.make
