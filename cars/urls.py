@@ -10,6 +10,6 @@ urlpatterns = [
   path('accessory/', AccessoryList.as_view(), name='accessory-list'),
   path('accessory/<int:id>/', AccessoryDetail.as_view(), name='accessory-detail'),
   path('cars/<int:car_id>/add_accessory/<int:accessory_id>/', AddAccessoryToCar.as_view(), name='add-accessory-to-car'),
-  path('cats/<int:car_id>/remove_accessory/<int:accessory_id>/', RemoveAccessoryFromCar.as_view(), name='remove-accesssory-from-car'),
+  path('cars/<int:car_id>/remove_accessory/<int:accessory_id>/', RemoveAccessoryFromCar.as_view(), name='remove-accesssory-from-car'),
 
 ]
